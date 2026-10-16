@@ -866,6 +866,7 @@ function onLogin(user: User): void {
   appEl.classList.remove('hidden');
   userInfo.classList.remove('hidden');
   userAvatar.src = user.photoURL ?? '';
+  userAvatar.classList.toggle('hidden', !user.photoURL);
   userAvatar.alt = user.displayName ?? '';
   userName.textContent = user.displayName ?? '';
   state.unsubscribe = subscribeTries(user.uid, (items) => {
