@@ -10,6 +10,9 @@ import {
 } from './store';
 import { dayIndex, trialDone, trialEnd, isTrialOver, streak, recentRate } from './stats';
 import { TryItem, Verdict } from './types';
+import { initClickTracking } from './analytics';
+
+initClickTracking();
 
 // ============================================================
 // DOM refs
