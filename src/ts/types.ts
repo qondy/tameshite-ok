@@ -14,8 +14,10 @@ export interface TryItem {
   status: TryStatus;
   /** おためし期間（日数） */
   trialDays: number;
-  /** おためし開始日 YYYY-MM-DD */
+  /** おためし開始日 YYYY-MM-DD（もう一度試すと上書きされる） */
   trialStart: string | null;
+  /** はじめて試した日 YYYY-MM-DD（もう一度試しても変わらない） */
+  firstTrialStart: string | null;
   /** 習慣にした日 YYYY-MM-DD */
   habitStart: string | null;
   /** やった日 YYYY-MM-DD → true（おためし中・習慣の両方で使う） */

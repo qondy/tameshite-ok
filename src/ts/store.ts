@@ -40,6 +40,7 @@ export function subscribeTries(
         status: STATUSES.includes(data.status) ? data.status : 'idea',
         trialDays: typeof data.trialDays === 'number' && data.trialDays > 0 ? Math.floor(data.trialDays) : 7,
         trialStart: dateOrNull(data.trialStart),
+        firstTrialStart: dateOrNull(data.firstTrialStart),
         habitStart: dateOrNull(data.habitStart),
         checks,
         verdict: VERDICTS.includes(data.verdict) ? data.verdict : null,
@@ -75,11 +76,12 @@ export function updateIdea(uid: string, id: string, input: IdeaInput): Promise<v
 }
 
 /** おためしを始める（もう一度試す場合も同じ。前回のチェックは残すが期間の判定は開始日以降のみ） */
-export function startTrial(uid: string, id: string, days: number, start: string, rounds: number): Promise<void> {
+export function startTrial(uid: string, id: string, days: number, start: string, rounds: number, firstStart: string): Promise<void> {
   return setDoc(tryDoc(uid, id), {
     status: 'trying',
     trialDays: days,
     trialStart: start,
+    firstTrialStart: firstStart,
     verdict: deleteField(),
     verdictNote: deleteField(),
     rounds: rounds + 1,

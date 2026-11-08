@@ -129,8 +129,22 @@
           <div class="stat-card"><div class="stat-card__value" id="stat-good">0</div><div class="stat-card__label">合った</div></div>
           <div class="stat-card"><div class="stat-card__value" id="stat-habit">0</div><div class="stat-card__label">習慣になった</div></div>
         </div>
-        <div class="filter-chips" id="record-filter" role="radiogroup"></div>
-        <div id="record-list" class="card-list"></div>
+        <div class="segmented segmented--2 record-switch" role="tablist" aria-label="きろくの見かた">
+          <button type="button" class="segmented__btn is-active" role="tab" data-view="ayumi" aria-selected="true">あゆみ</button>
+          <button type="button" class="segmented__btn" role="tab" data-view="verdict" aria-selected="false">判定別</button>
+        </div>
+        <div id="ayumi-view">
+          <div id="ayumi-card" class="ayumi card-surface"></div>
+          <div class="list-head">
+            <h3 class="list-head__title">試したこと一覧</h3>
+            <button type="button" id="btn-ayumi-order" class="order-btn" data-sort="asc">古い順</button>
+          </div>
+          <div id="ayumi-list" class="timeline"></div>
+        </div>
+        <div id="verdict-view" class="hidden">
+          <div class="filter-chips" id="record-filter" role="radiogroup"></div>
+          <div id="record-list" class="card-list"></div>
+        </div>
       </section>
 
     </main>

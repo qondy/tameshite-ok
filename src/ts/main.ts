@@ -8,7 +8,9 @@ import {
   subscribeTries, createIdea, updateIdea, startTrial, setCheck, judge, promoteToHabit,
   restHabit, deleteTry,
 } from './store';
-import { dayIndex, trialDone, trialEnd, isTrialOver, streak, recentRate } from './stats';
+import {
+  dayIndex, trialDone, trialEnd, isTrialOver, streak, recentRate, firstTriedOn, ayumi, AYUMI_MIN_DAYS, PeriodStats,
+} from './stats';
 import { TryItem, Verdict } from './types';
 import { initClickTracking } from './analytics';
 
@@ -43,6 +45,12 @@ const recordList = $('record-list');
 const statTried = $('stat-tried');
 const statGood = $('stat-good');
 const statHabit = $('stat-habit');
+const recordSwitchButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.record-switch .segmented__btn'));
+const ayumiView = $('ayumi-view');
+const verdictView = $('verdict-view');
+const ayumiCard = $('ayumi-card');
+const ayumiList = $('ayumi-list');
+const btnAyumiOrder = $<HTMLButtonElement>('btn-ayumi-order');
 
 const btnFab = $<HTMLButtonElement>('btn-fab');
 const btnAddInline = $<HTMLButtonElement>('btn-add-inline');
@@ -98,6 +106,7 @@ const btnFeedbackSend = $<HTMLButtonElement>('btn-feedback-send');
 // ============================================================
 type Tab = 'today' | 'list' | 'habits' | 'record';
 type RecordFilter = 'all' | Verdict;
+type RecordView = 'ayumi' | 'verdict';
 
 interface State {
   uid: string | null;
@@ -106,6 +115,8 @@ interface State {
   loaded: boolean;
   tab: Tab;
   recordFilter: RecordFilter;
+  recordView: RecordView;
+  ayumiOldestFirst: boolean;
   editingId: string | null;
   trialId: string | null;
   trialDays: number;
@@ -126,6 +137,8 @@ const state: State = {
   loaded: false,
   tab: 'today',
   recordFilter: 'all',
+  recordView: 'ayumi',
+  ayumiOldestFirst: true,
   editingId: null,
   trialId: null,
   trialDays: 7,
@@ -511,12 +524,167 @@ function renderHabitModal(): void {
   }
 }
 
+// ============================================================
+// あゆみ（はじめのころといまの比較＋試したこと一覧）
+// ============================================================
+const shortDate = (key: string): string => {
+  const [, m, d] = key.split('-').map(Number);
+  return `${m}/${d}`;
+};
+
+function compareRow(label: string, unit: string, before: number, after: number): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'compare__row';
+  const diff = after - before;
+  append(
+    row,
+    textEl('span', 'compare__label', label),
+    textEl('span', 'compare__value', `${before}${unit}`),
+    textEl('span', 'compare__arrow', '→'),
+    textEl('span', 'compare__value compare__value--now', `${after}${unit}`),
+    textEl('span', `compare__diff${diff > 0 ? ' is-up' : ''}`, diff > 0 ? `+${diff}` : diff === 0 ? '±0' : String(diff)),
+  );
+  return row;
+}
+
+function compareHeadRow(className: string, before: string, after: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = `compare__row ${className}`;
+  append(
+    row,
+    textEl('span', 'compare__label', ''),
+    textEl('span', 'compare__value', before),
+    textEl('span', 'compare__arrow', ''),
+    textEl('span', 'compare__value compare__value--now', after),
+    textEl('span', 'compare__diff', ''),
+  );
+  return row;
+}
+
+function ayumiMessage(first: PeriodStats, recent: PeriodStats): string {
+  const d = recent.activeDays - first.activeDays;
+  if (d > 0) return `はじめのころより、動けた日が${d}日増えています。`;
+  if (d === 0) return recent.activeDays > 0 ? 'はじめのころと同じペースで続いています。' : 'またひとつ、気軽に試してみませんか。';
+  return '数より、試しつづけていることが前進です。休んだぶん、また気軽に。';
+}
+
+function renderAyumiCard(): void {
+  ayumiCard.replaceChildren();
+  const today = todayKey();
+  const a = ayumi(state.items, today);
+  if (!a) {
+    ayumiCard.appendChild(emptyState('はじめてのおためしを始めると、ここにあなたのあゆみが記録されていきます。'));
+    return;
+  }
+  const firstItem = state.items
+    .filter((i) => firstTriedOn(i) === a.origin)
+    .sort((x, y) => x.createdAt - y.createdAt)[0];
+  const head = document.createElement('div');
+  head.className = 'ayumi__head';
+  append(
+    head,
+    textEl('p', 'ayumi__label', 'はじめの一歩'),
+    textEl('p', 'ayumi__first', `${labelOf(a.origin)}「${firstItem?.title ?? ''}」`),
+    textEl('p', 'ayumi__days', `そこから ${a.dayCount}日目`),
+  );
+  ayumiCard.appendChild(head);
+
+  if (!a.first || !a.recent || !a.span) {
+    ayumiCard.appendChild(textEl('p', 'ayumi__note', `あと${AYUMI_MIN_DAYS - a.dayCount}日で、はじめのころの自分といまの自分を比べられるようになります。`));
+    return;
+  }
+  const compare = document.createElement('div');
+  compare.className = 'compare';
+  append(
+    compare,
+    compareHeadRow('compare__row--head', `はじめの${a.span}日`, `いまの${a.span}日`),
+    compareHeadRow('compare__row--range', `${shortDate(a.first.from)}〜${shortDate(a.first.to)}`, `${shortDate(a.recent.from)}〜${shortDate(a.recent.to)}`),
+    compareRow('動けた日', '日', a.first.activeDays, a.recent.activeDays),
+    compareRow('やった回数', '回', a.first.checks, a.recent.checks),
+    compareRow('試し始めたこと', '個', a.first.started, a.recent.started),
+  );
+  append(ayumiCard, compare, textEl('p', 'ayumi__message', ayumiMessage(a.first, a.recent)));
+}
+
+function statusLabel(item: TryItem): { text: string; cls: string } {
+  if (item.status === 'habit') return { text: '習慣', cls: 'status-pill status-pill--habit' };
+  if (item.status === 'trying') return { text: 'おためし中', cls: 'status-pill' };
+  if (item.verdict) return { text: VERDICT_LABEL[item.verdict], cls: `verdict-pill verdict-pill--${item.verdict}` };
+  return { text: '試した', cls: 'status-pill' };
+}
+
+function renderAyumiList(): void {
+  ayumiList.replaceChildren();
+  const tried = state.items
+    .filter((i) => firstTriedOn(i))
+    .sort((a, b) => (firstTriedOn(a) as string).localeCompare(firstTriedOn(b) as string) || a.createdAt - b.createdAt);
+  btnAyumiOrder.textContent = state.ayumiOldestFirst ? '古い順' : '新しい順';
+  btnAyumiOrder.dataset.sort = state.ayumiOldestFirst ? 'asc' : 'desc';
+  btnAyumiOrder.classList.toggle('hidden', tried.length < 2);
+  if (!tried.length) {
+    ayumiList.appendChild(emptyState('まだ試したことはありません。「やってみたい」から1つ選んで、おためしを始めてみましょう。'));
+    return;
+  }
+  // 番号は常に「試した順」。並び順を変えても #1 がはじめの一歩
+  const numbered = tried.map((item, i) => ({ item, no: i + 1 }));
+  if (!state.ayumiOldestFirst) numbered.reverse();
+
+  let currentMonth = '';
+  let group: HTMLOListElement | null = null;
+  numbered.forEach(({ item, no }) => {
+    const first = firstTriedOn(item) as string;
+    const month = first.slice(0, 7);
+    if (!group || month !== currentMonth) {
+      currentMonth = month;
+      const [y, m] = month.split('-').map(Number);
+      ayumiList.appendChild(textEl('h4', 'timeline__month', `${y}年${m}月`));
+      group = document.createElement('ol');
+      group.className = 'timeline__list';
+      ayumiList.appendChild(group);
+    }
+    const pill = statusLabel(item);
+    const top = document.createElement('div');
+    top.className = 'timeline__top';
+    append(
+      top,
+      textEl('span', 'timeline__no', `#${no}`),
+      textEl('span', 'timeline__date', labelOf(first)),
+      textEl('span', pill.cls, pill.text),
+    );
+    const meta = [`やった ${item.checks.size}日`];
+    if (item.rounds > 1) meta.push(`${item.rounds}回試した`);
+    const li = document.createElement('li');
+    li.className = 'timeline__item';
+    append(
+      li,
+      top,
+      textEl('p', 'timeline__title', item.title),
+      textEl('p', 'timeline__meta', meta.join('・')),
+      item.verdictNote ? textEl('p', 'timeline__note', item.verdictNote) : null,
+    );
+    group.appendChild(li);
+  });
+}
+
+function renderRecordView(): void {
+  recordSwitchButtons.forEach((b) => {
+    const on = b.dataset.view === state.recordView;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  ayumiView.classList.toggle('hidden', state.recordView !== 'ayumi');
+  verdictView.classList.toggle('hidden', state.recordView !== 'verdict');
+  renderAyumiCard();
+  renderAyumiList();
+}
+
 function renderAll(): void {
   renderTabs();
   renderToday();
   renderIdeas();
   renderHabits();
   renderRecord();
+  renderRecordView();
   renderHabitModal();
 }
 
@@ -622,7 +790,8 @@ btnTrialStart.addEventListener('click', () => {
   const days = state.trialDays;
   btnTrialStart.disabled = true;
   void withLock(`trial:${item.id}`, async () => {
-    await startTrial(uid, item.id, days, todayKey(), item.rounds);
+    const today = todayKey();
+    await startTrial(uid, item.id, days, today, item.rounds, firstTriedOn(item) ?? today);
     closeTrial();
     showToast('おためしスタート！ まずは今日、5分だけでも');
     setTab('today');
@@ -757,6 +926,14 @@ btnHabitRest.addEventListener('click', () => {
 // Events
 // ============================================================
 tabButtons.forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab as Tab)));
+recordSwitchButtons.forEach((b) => b.addEventListener('click', () => {
+  state.recordView = b.dataset.view as RecordView;
+  renderRecordView();
+}));
+btnAyumiOrder.addEventListener('click', () => {
+  state.ayumiOldestFirst = !state.ayumiOldestFirst;
+  renderAyumiList();
+});
 btnFab.addEventListener('click', () => openIdea(null));
 btnAddInline.addEventListener('click', () => openIdea(null));
 $('btn-idea-close').addEventListener('click', closeIdea);
